@@ -266,10 +266,13 @@ async def fetch_whoop_data(days: int = 7) -> dict:
         r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout", headers=headers,
                                    params={"start": start, "limit": days * 2})
 
+    rec = r_rec.json()   if r_rec.status_code == 200 else {}
+    slp = r_sleep.json() if r_sleep.status_code == 200 else {}
+    wrk = r_work.json()  if r_work.status_code == 200 else {}
     return {
-        "recovery": r_rec.json().get("records", []),
-        "sleep": r_sleep.json().get("records", []),
-        "workouts": r_work.json().get("records", []),
+        "recovery": rec.get("records", []),
+        "sleep": slp.get("records", []),
+        "workouts": wrk.get("records", []),
     }
 
 # ─── Coleta de dados Garmin ────────────────────────────────────────────────────
