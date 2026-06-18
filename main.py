@@ -155,9 +155,12 @@ async def valid_token(provider: str) -> str | None:
 # ─── Auth routes ───────────────────────────────────────────────────────────────
 @app.get("/auth/whoop")
 async def auth_whoop():
+    import secrets
+    state = secrets.token_hex(8)
     url = (f"{WHOOP_AUTH_URL}?client_id={WHOOP_CLIENT_ID}"
            f"&redirect_uri={WHOOP_REDIRECT_URI}&response_type=code"
-           f"&scope=read:recovery read:sleep read:workout read:body_measurement offline")
+           f"&scope=read:recovery read:sleep read:workout read:body_measurement offline"
+           f"&state={state}")
     return RedirectResponse(url)
 
 @app.get("/auth/whoop/callback")
