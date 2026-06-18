@@ -52,6 +52,8 @@ async def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    import asyncio
+    asyncio.create_task(daily_scheduler())
     yield
 
 app = FastAPI(title="Personal Coach Agent", lifespan=lifespan)
@@ -264,13 +266,10 @@ async def fetch_whoop_data(days: int = 7) -> dict:
         r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout", headers=headers,
                                    params={"start": start, "limit": days * 2})
 
-    rec  = r_rec.json()   if r_rec.status_code   == 200 else {}
-    slp  = r_sleep.json() if r_sleep.status_code == 200 else {}
-    wrk  = r_work.json()  if r_work.status_code  == 200 else {}
     return {
-        "recovery": rec.get("records", []),
-        "sleep": slp.get("records", []),
-        "workouts": wrk.get("records", []),
+        "recovery": r_rec.json().get("records", []),
+        "sleep": r_sleep.json().get("records", []),
+        "workouts": r_work.json().get("records", []),
     }
 
 # ─── Coleta de dados Garmin ────────────────────────────────────────────────────
@@ -553,3 +552,266 @@ async def export_excel(days: int = 7):
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "Personal Coach Agent"}
+
+# ─── Relatório diário de sono e recovery ──────────────────────────────────────
+async def generate_daily_report() -> dict:
+    days = 2
+    whoop  = await fetch_whoop_data(days)
+    garmin = await fetch_garmin_data(days)
+    strava = await fetch_strava_data(days)
+    coros  = await fetch_coros_data(days)
+
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    prompt = f"""Você é um treinador pessoal e especialista em recuperação atlética.
+Analise os dados abaixo e gere um relatório diário completo em JSON com esta estrutura exata:
+
+{{
+  "data": "DD/MM/YYYY",
+  "saudacao": "Bom dia, Bruno!",
+  "resumo_executivo": "2-3 frases sobre o estado geral de hoje",
+  "sono": {{
+    "duracao_horas": 7.5,
+    "qualidade": "boa|regular|ruim",
+    "nota": 85,
+    "estagio_rem_min": 90,
+    "estagio_deep_min": 60,
+    "estagio_light_min": 120,
+    "disturbios": 3,
+    "analise": "análise detalhada do sono desta noite",
+    "comparativo": "comparado com sua média recente"
+  }},
+  "recovery": {{
+    "score": 78,
+    "status": "verde|amarelo|vermelho",
+    "hrv": 65.0,
+    "hrv_tendencia": "subindo|estavel|caindo",
+    "fc_repouso": 52,
+    "analise": "análise do recovery de hoje"
+  }},
+  "strain": {{
+    "score_ontem": 12.5,
+    "nivel": "leve|moderado|alto|muito alto",
+    "analise": "como a carga de ontem afeta hoje"
+  }},
+  "recomendacao_treino": {{
+    "tipo": "Corrida fácil|Intervalado|Tempo run|Long run|Força|Descanso ativo|Descanso",
+    "descricao": "descrição detalhada do treino recomendado",
+    "duracao_min": 45,
+    "distancia_km": 8.0,
+    "zona_fc": "Z1-Z2",
+    "justificativa": "por que esse treino baseado nos dados de hoje"
+  }},
+  "dicas_do_dia": ["dica 1", "dica 2", "dica 3"],
+  "alerta": "alerta importante se houver, ou null"
+}}
+
+Dados disponíveis:
+WHOOP (recovery, sono, workouts): {json.dumps(whoop, ensure_ascii=False, default=str)[:3000]}
+GARMIN (dailies, sono): {json.dumps(garmin, ensure_ascii=False, default=str)[:2000]}
+STRAVA: {json.dumps(strava[:3], ensure_ascii=False, default=str)[:1000]}
+COROS: {json.dumps(coros[:3], ensure_ascii=False, default=str)[:1000]}
+
+Retorne APENAS o JSON, sem markdown, sem explicações."""
+
+    msg = ai.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=3000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = msg.content[0].text.strip()
+    try:
+        return json.loads(raw)
+    except:
+        return {"raw": raw}
+
+
+def build_email_html(report: dict) -> str:
+    sono    = report.get("sono", {})
+    rec     = report.get("recovery", {})
+    strain  = report.get("strain", {})
+    treino  = report.get("recomendacao_treino", {})
+    dicas   = report.get("dicas_do_dia", [])
+    alerta  = report.get("alerta")
+
+    status_cores = {"verde": "#00C9A7", "amarelo": "#F4C542", "vermelho": "#E63946"}
+    rec_cor = status_cores.get(rec.get("status", "verde"), "#00C9A7")
+
+    qualidade_cores = {"boa": "#00C9A7", "regular": "#F4C542", "ruim": "#E63946"}
+    sono_cor = qualidade_cores.get(sono.get("qualidade", "boa"), "#00C9A7")
+
+    alerta_html = f"""
+    <div style="background:#2D1B1B;border-left:4px solid #E63946;padding:14px 18px;border-radius:8px;margin-bottom:20px;">
+      <p style="color:#FF6B6B;margin:0;font-size:14px;">⚠️ {alerta}</p>
+    </div>""" if alerta else ""
+
+    dicas_html = "".join([f'<li style="color:#C8D0E0;font-size:14px;margin-bottom:8px;">{d}</li>' for d in dicas])
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0D0D1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:600px;margin:0 auto;padding:32px 20px;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1A1A2E,#16213E);border-radius:16px;padding:28px;margin-bottom:20px;border:1px solid #2A2A4A;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <span style="font-size:32px;">🏃</span>
+        <div>
+          <h1 style="color:#F0F0F5;margin:0;font-size:22px;font-weight:700;">Coach Agent</h1>
+          <p style="color:#6C757D;margin:0;font-size:13px;">Relatório diário • {report.get("data", "")}</p>
+        </div>
+      </div>
+      <p style="color:#C8D0E0;margin:0;font-size:15px;line-height:1.6;">{report.get("resumo_executivo", "")}</p>
+    </div>
+
+    {alerta_html}
+
+    <!-- Sono -->
+    <div style="background:#1A1A2E;border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid #2A2A4A;">
+      <h2 style="color:#F0F0F5;margin:0 0 16px;font-size:16px;font-weight:600;">😴 Sono desta noite</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">Duração</p>
+          <p style="color:#F0F0F5;margin:0;font-size:20px;font-weight:700;">{sono.get("duracao_horas", "–")}h</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">Qualidade</p>
+          <p style="color:{sono_cor};margin:0;font-size:20px;font-weight:700;">{sono.get("qualidade","–").upper()}</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">Nota</p>
+          <p style="color:#4361EE;margin:0;font-size:20px;font-weight:700;">{sono.get("nota","–")}</p>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+        <div style="background:#0D0D1A;border-radius:6px;padding:8px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;">REM</p>
+          <p style="color:#8338EC;margin:0;font-size:14px;font-weight:600;">{sono.get("estagio_rem_min","–")} min</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:6px;padding:8px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;">Profundo</p>
+          <p style="color:#4361EE;margin:0;font-size:14px;font-weight:600;">{sono.get("estagio_deep_min","–")} min</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:6px;padding:8px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;">Leve</p>
+          <p style="color:#00C9A7;margin:0;font-size:14px;font-weight:600;">{sono.get("estagio_light_min","–")} min</p>
+        </div>
+      </div>
+      <p style="color:#8892A4;margin:0;font-size:13px;line-height:1.6;">{sono.get("analise","")}</p>
+      <p style="color:#6C757D;margin:8px 0 0;font-size:12px;font-style:italic;">{sono.get("comparativo","")}</p>
+    </div>
+
+    <!-- Recovery -->
+    <div style="background:#1A1A2E;border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid {rec_cor}33;">
+      <h2 style="color:#F0F0F5;margin:0 0 16px;font-size:16px;font-weight:600;">⚡ Recovery</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;">
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">Score</p>
+          <p style="color:{rec_cor};margin:0;font-size:24px;font-weight:700;">{rec.get("score","–")}%</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">HRV</p>
+          <p style="color:#F0F0F5;margin:0;font-size:24px;font-weight:700;">{rec.get("hrv","–")}</p>
+          <p style="color:#6C757D;margin:0;font-size:10px;">{rec.get("hrv_tendencia","")}</p>
+        </div>
+        <div style="background:#0D0D1A;border-radius:8px;padding:12px;text-align:center;">
+          <p style="color:#6C757D;margin:0 0 4px;font-size:11px;text-transform:uppercase;">FC repouso</p>
+          <p style="color:#F0F0F5;margin:0;font-size:24px;font-weight:700;">{rec.get("fc_repouso","–")}</p>
+        </div>
+      </div>
+      <p style="color:#8892A4;margin:0;font-size:13px;line-height:1.6;">{rec.get("analise","")}</p>
+    </div>
+
+    <!-- Treino recomendado -->
+    <div style="background:#1A1A2E;border-radius:12px;padding:22px;margin-bottom:16px;border:1px solid #4361EE33;">
+      <h2 style="color:#F0F0F5;margin:0 0 16px;font-size:16px;font-weight:600;">🎯 Treino de hoje</h2>
+      <div style="background:#4361EE22;border-radius:8px;padding:14px;margin-bottom:12px;">
+        <p style="color:#4361EE;margin:0 0 6px;font-size:16px;font-weight:700;">{treino.get("tipo","")}</p>
+        <p style="color:#C8D0E0;margin:0;font-size:13px;">{treino.get("descricao","")}</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+        <div style="text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;text-transform:uppercase;">Duração</p>
+          <p style="color:#F0F0F5;margin:0;font-size:14px;font-weight:600;">{treino.get("duracao_min","–")} min</p>
+        </div>
+        <div style="text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;text-transform:uppercase;">Distância</p>
+          <p style="color:#F0F0F5;margin:0;font-size:14px;font-weight:600;">{treino.get("distancia_km","–")} km</p>
+        </div>
+        <div style="text-align:center;">
+          <p style="color:#6C757D;margin:0 0 2px;font-size:10px;text-transform:uppercase;">Zona FC</p>
+          <p style="color:#F0F0F5;margin:0;font-size:14px;font-weight:600;">{treino.get("zona_fc","–")}</p>
+        </div>
+      </div>
+      <p style="color:#6C757D;margin:0;font-size:12px;font-style:italic;">💡 {treino.get("justificativa","")}</p>
+    </div>
+
+    <!-- Dicas -->
+    <div style="background:#1A1A2E;border-radius:12px;padding:22px;margin-bottom:20px;border:1px solid #2A2A4A;">
+      <h2 style="color:#F0F0F5;margin:0 0 12px;font-size:16px;font-weight:600;">💡 Dicas do dia</h2>
+      <ul style="margin:0;padding-left:20px;">
+        {dicas_html}
+      </ul>
+    </div>
+
+    <!-- Footer -->
+    <p style="color:#3A3A5A;text-align:center;font-size:11px;margin:0;">Coach Agent • WHOOP + Garmin + COROS + Strava → Claude AI</p>
+  </div>
+</body>
+</html>"""
+
+
+async def send_daily_email(report: dict):
+    import httpx
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        return
+
+    html = build_email_html(report)
+    data_str = report.get("data", datetime.now().strftime("%d/%m/%Y"))
+
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "from": "Coach Agent <onboarding@resend.dev>",
+                "to": ["dobruno@gmail.com"],
+                "subject": f"🏃 Relatório diário — {data_str}",
+                "html": html,
+            }
+        )
+
+
+# ─── Scheduler (10h Brasília = 13h UTC) ───────────────────────────────────────
+async def daily_scheduler():
+    while True:
+        now = datetime.utcnow()
+        target = now.replace(hour=13, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_seconds = (target - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+        try:
+            report = await generate_daily_report()
+            await send_daily_email(report)
+        except Exception as e:
+            print(f"Erro no relatório diário: {e}")
+
+
+
+# ─── Endpoints manuais de relatório ───────────────────────────────────────────
+@app.post("/report/daily")
+async def report_daily():
+    report = await generate_daily_report()
+    await send_daily_email(report)
+    return {"status": "email enviado", "report": report}
+
+@app.get("/report/preview")
+async def report_preview():
+    report = await generate_daily_report()
+    return report
+
