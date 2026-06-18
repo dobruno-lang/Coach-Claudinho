@@ -256,18 +256,17 @@ async def fetch_whoop_data(days: int = 7) -> dict:
     if not token:
         return {}
     headers = {"Authorization": f"Bearer {token}"}
-    start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT00:00:00.000Z")
     
     async with httpx.AsyncClient() as client:
-        # Recovery
-        r_rec = await client.get(f"{WHOOP_API_BASE}/recovery", headers=headers,
-                                  params={"start": start, "limit": days})
-        # Sleep
-        r_sleep = await client.get(f"{WHOOP_API_BASE}/activity/sleep", headers=headers,
-                                    params={"start": start, "limit": days})
-        # Workouts
-        r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout", headers=headers,
-                                   params={"start": start, "limit": days * 2})
+        r_rec = await client.get(f"{WHOOP_API_BASE}/recovery",
+                                  headers=headers,
+                                  params={"limit": days})
+        r_sleep = await client.get(f"{WHOOP_API_BASE}/activity/sleep",
+                                    headers=headers,
+                                    params={"limit": days})
+        r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout",
+                                   headers=headers,
+                                   params={"limit": days * 2})
 
     rec = r_rec.json()   if r_rec.status_code == 200 else {}
     slp = r_sleep.json() if r_sleep.status_code == 200 else {}
