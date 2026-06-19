@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Coach Claudinho</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -150,6 +151,35 @@
   .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
   .metric-value { font-size: 22px; font-weight: 600; }
 
+  /* ── Readiness card ── */
+  .readiness-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; }
+  .readiness-top { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+  .readiness-gauge { position: relative; width: 88px; height: 88px; flex-shrink: 0; }
+  .readiness-gauge svg { transform: rotate(-90deg); }
+  .readiness-gauge-bg { fill: none; stroke: var(--bg3); stroke-width: 8; }
+  .readiness-gauge-fg { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+  .readiness-gauge-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  .readiness-gauge-num .n { font-size: 24px; font-weight: 600; line-height: 1; }
+  .readiness-gauge-num .l { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .readiness-info h3 { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .readiness-info p { font-size: 12px; color: var(--text2); }
+  .readiness-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .axis-box { background: var(--bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .axis-title { font-size: 11px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .axis-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: var(--text); }
+  .axis-row span:last-child { color: var(--text2); }
+  .readiness-fatores { display: flex; flex-direction: column; gap: 6px; }
+  .fator-item { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--text2); }
+  .fator-item i { font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+
+  /* ── Charts ── */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .chart-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; }
+  .chart-card-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .chart-card-sub { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 200px; }
+  @media (max-width: 720px) { .charts-row { grid-template-columns: 1fr; } }
+
   /* ── Status badges ── */
   .badge {
     display: inline-flex; align-items: center; gap: 5px;
@@ -259,6 +289,8 @@
     </div>
 
     <div id="tab-resumo">
+      <div id="readiness-content"></div>
+      <div id="charts-content"></div>
       <div id="resumo-content">
         <div class="empty"><i class="ti ti-brain"></i>Clique em "Analisar" para gerar o plano com IA</div>
       </div>
@@ -460,6 +492,152 @@ function tipoClass(tipo) {
   return 't-descanso';
 }
 
+function readinessLabel(cor) {
+  return {verde:'Pronto para treinar', amarelo:'Treine com atenção', vermelho:'Priorize recuperação'}[cor] || '–';
+}
+
+function renderReadiness(report) {
+  const el = document.getElementById('readiness-content');
+  if (!report || !report.prontidao) { el.innerHTML = ''; return; }
+
+  const p = report.prontidao;
+  const perf = report.performance || {};
+  const bem = report.bem_estar || {};
+  const colorVar = {verde:'var(--green)', amarelo:'var(--yellow)', vermelho:'var(--red)'}[p.cor] || 'var(--text2)';
+
+  const circumference = 2 * Math.PI * 36;
+  const offset = circumference - (p.indice / 100) * circumference;
+
+  const acwr = perf.acwr || {};
+  const mono = perf.monotonia_strain || {};
+  const hrv = bem.hrv || {};
+  const sono = bem.sono_tendencia || {};
+  const rec = bem.recovery_tendencia || {};
+
+  const tendIcon = (t) => ({
+    subindo:'ti-trending-up', melhorando:'ti-trending-up',
+    caindo:'ti-trending-down', piorando:'ti-trending-down',
+    estavel:'ti-minus', abaixo_da_baseline:'ti-trending-down',
+    acima_da_baseline:'ti-trending-up'
+  }[t] || 'ti-minus');
+
+  const fatoresHtml = (p.fatores||[]).map(f => `<div class="fator-item"><i class="ti ti-point-filled" style="color:${colorVar}"></i><span>${f}</span></div>`).join('');
+
+  el.innerHTML = `
+    <div class="readiness-card">
+      <div class="readiness-top">
+        <div class="readiness-gauge">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle class="readiness-gauge-bg" cx="44" cy="44" r="36"/>
+            <circle class="readiness-gauge-fg" cx="44" cy="44" r="36" stroke="${colorVar}"
+              stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+          </svg>
+          <div class="readiness-gauge-num"><div class="n">${p.indice}</div><div class="l">/100</div></div>
+        </div>
+        <div class="readiness-info">
+          <h3>${readinessLabel(p.cor)}</h3>
+          <p>Índice de prontidão — cruza performance e bem-estar</p>
+        </div>
+      </div>
+      <div class="readiness-axes">
+        <div class="axis-box">
+          <div class="axis-title"><i class="ti ti-bolt"></i>Performance</div>
+          <div class="axis-row"><span>ACWR</span><span>${acwr.ratio ?? '–'} (${acwr.zona ?? '–'})</span></div>
+          <div class="axis-row"><span>Monotonia</span><span>${mono.monotonia ?? '–'}</span></div>
+          <div class="axis-row"><span>Carga 7d</span><span>${mono.carga_total_semana ?? '–'}</span></div>
+        </div>
+        <div class="axis-box">
+          <div class="axis-title"><i class="ti ti-heart"></i>Bem-estar</div>
+          <div class="axis-row"><span>HRV vs. base</span><span><i class="ti ${tendIcon(hrv.tendencia)}" style="font-size:12px"></i> ${hrv.desvio_pct ?? '–'}%</span></div>
+          <div class="axis-row"><span>Sono (14d)</span><span><i class="ti ${tendIcon(sono.tendencia)}" style="font-size:12px"></i> ${sono.tendencia ?? '–'}</span></div>
+          <div class="axis-row"><span>Recovery (14d)</span><span><i class="ti ${tendIcon(rec.tendencia)}" style="font-size:12px"></i> ${rec.tendencia ?? '–'}</span></div>
+        </div>
+      </div>
+      <div class="readiness-fatores">${fatoresHtml}</div>
+    </div>`;
+}
+
+let chartLoad = null;
+let chartWellbeing = null;
+
+function chartColors() {
+  const cs = getComputedStyle(document.body);
+  return {
+    text2: '#9090a0',
+    grid: 'rgba(255,255,255,0.06)',
+    accent: '#4f8ef7',
+    coral: '#e0795a',
+    teal: '#3ecf8e',
+    amber: '#f5c542',
+  };
+}
+
+function renderCharts(series) {
+  const el = document.getElementById('charts-content');
+  if (!series || !series.labels || !series.labels.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-card-title"><i class="ti ti-bolt"></i>Carga de treino</div>
+        <div class="chart-card-sub">Strain diário vs. carga aguda (7d) e crônica (28d)</div>
+        <div class="chart-wrap"><canvas id="chart-load"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-title"><i class="ti ti-heart"></i>Tendência de bem-estar</div>
+        <div class="chart-card-sub">HRV e recovery score nos últimos dias</div>
+        <div class="chart-wrap"><canvas id="chart-wellbeing"></canvas></div>
+      </div>
+    </div>`;
+
+  const c = chartColors();
+  if (chartLoad) chartLoad.destroy();
+  if (chartWellbeing) chartWellbeing.destroy();
+
+  const ctxLoad = document.getElementById('chart-load').getContext('2d');
+  chartLoad = new Chart(ctxLoad, {
+    data: {
+      labels: series.labels,
+      datasets: [
+        { type: 'bar', label: 'Strain diário', data: series.strain_diario, backgroundColor: 'rgba(79,142,247,0.35)', borderRadius: 3, order: 3 },
+        { type: 'line', label: 'Carga aguda (7d)', data: series.carga_aguda, borderColor: c.coral, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.3, order: 1 },
+        { type: 'line', label: 'Carga crônica (28d)', data: series.carga_cronica, borderColor: c.text2, backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4,3], pointRadius: 0, tension: 0.3, order: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: c.text2, font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+      scales: {
+        x: { ticks: { color: c.text2, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }, grid: { display: false } },
+        y: { ticks: { color: c.text2, font: { size: 10 } }, grid: { color: c.grid } }
+      }
+    }
+  });
+
+  const ctxWell = document.getElementById('chart-wellbeing').getContext('2d');
+  chartWellbeing = new Chart(ctxWell, {
+    type: 'line',
+    data: {
+      labels: series.labels,
+      datasets: [
+        { label: 'HRV (ms)', data: series.hrv, borderColor: c.teal, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, spanGaps: true, tension: 0.3, yAxisID: 'y' },
+        { label: 'Recovery (%)', data: series.recovery_score, borderColor: c.amber, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, spanGaps: true, tension: 0.3, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: c.text2, font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+      scales: {
+        x: { ticks: { color: c.text2, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 }, grid: { display: false } },
+        y: { type: 'linear', position: 'left', ticks: { color: c.text2, font: { size: 10 } }, grid: { color: c.grid } },
+        y1: { type: 'linear', position: 'right', min: 0, max: 100, ticks: { color: c.text2, font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
 async function runAnalyze() {
   document.getElementById('resumo-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Analisando com IA — pode levar alguns segundos...</div>';
   document.getElementById('plano-content').innerHTML  = '<div class="empty"><i class="ti ti-loader"></i>Aguardando análise...</div>';
@@ -468,6 +646,8 @@ async function runAnalyze() {
     if (!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
     const a = data.analysis;
+    renderReadiness(data.readiness_report);
+    renderCharts(data.readiness_report ? data.readiness_report.series : null);
     if (!a || a.raw) { document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Resposta inesperada da API.</div>`; return; }
 
     const statusClass = {verde:'badge-green',amarelo:'badge-yellow',vermelho:'badge-red'}[a.estado_recovery||'verde']||'badge-green';
