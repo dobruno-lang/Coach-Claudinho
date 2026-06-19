@@ -805,8 +805,7 @@ async def daily_scheduler():
             await send_daily_email(report)
         except Exception as e:
             print(f"Erro no relatório diário: {e}")
-
-
+            
 
 # ─── Endpoints manuais de relatório ───────────────────────────────────────────
 @app.post("/report/daily")
@@ -820,3 +819,7 @@ async def report_preview():
     report = await generate_daily_report()
     return report
 
+@app.get("/dashboard")
+async def dashboard():
+    from fastapi.responses import FileResponse
+    return FileResponse("dashboard.html")
