@@ -353,7 +353,7 @@ async def sync_all(days: int = 7):
 @app.post("/analyze")
 async def analyze(days: int = 7):
     data = await sync_all(days)
-report = build_readiness_report(data.get("whoop", {}))
+    report = build_readiness_report(data.get("whoop", {}))
     ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
