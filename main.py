@@ -70,7 +70,7 @@ WHOOP_CLIENT_SECRET = os.getenv("WHOOP_CLIENT_SECRET")
 WHOOP_REDIRECT_URI  = os.getenv("BASE_URL") + "/auth/whoop/callback"
 WHOOP_AUTH_URL      = "https://api.prod.whoop.com/oauth/oauth2/auth"
 WHOOP_TOKEN_URL     = "https://api.prod.whoop.com/oauth/oauth2/token"
-WHOOP_API_BASE      = "https://api.prod.whoop.com/developer/v1"
+WHOOP_API_BASE      = "https://api.prod.whoop.com/developer/v2"
 
 # ─── Garmin Health API ─────────────────────────────────────────────────────────
 GARMIN_CLIENT_ID     = os.getenv("GARMIN_CLIENT_ID")
@@ -256,25 +256,25 @@ async def fetch_whoop_data(days: int = 7) -> dict:
     if not token:
         return {}
     headers = {"Authorization": f"Bearer {token}"}
-    
-    async with httpx.AsyncClient() as client:
-        r_rec = await client.get(f"{WHOOP_API_BASE}/recovery",
-                                  headers=headers,
-                                  params={"limit": days})
-        r_sleep = await client.get(f"{WHOOP_API_BASE}/activity/sleep",
-                                    headers=headers,
-                                    params={"limit": days})
-        r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout",
-                                   headers=headers,
-                                   params={"limit": days * 2})
+    start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%dT00:00:00.000Z")
 
-    rec = r_rec.json()   if r_rec.status_code == 200 else {}
-    slp = r_sleep.json() if r_sleep.status_code == 200 else {}
-    wrk = r_work.json()  if r_work.status_code == 200 else {}
+    async with httpx.AsyncClient() as client:
+        r_rec = await client.get(f"{WHOOP_API_BASE}/recovery", headers=headers,
+                                  params={"start": start, "limit": days})
+        r_sleep = await client.get(f"{WHOOP_API_BASE}/activity/sleep", headers=headers,
+                                    params={"start": start, "limit": days})
+        r_work = await client.get(f"{WHOOP_API_BASE}/activity/workout", headers=headers,
+                                   params={"start": start, "limit": days * 2})
+
     return {
-        "recovery": rec.get("records", []),
-        "sleep": slp.get("records", []),
-        "workouts": wrk.get("records", []),
+        "recovery": r_rec.json().get("records", []) if r_rec.status_code == 200 else [],
+        "sleep": r_sleep.json().get("records", []) if r_sleep.status_code == 200 else [],
+        "workouts": r_work.json().get("records", []) if r_work.status_code == 200 else [],
+        "_debug": {
+            "recovery_status": r_rec.status_code,
+            "sleep_status": r_sleep.status_code,
+            "workout_status": r_work.status_code,
+        }
     }
 
 # ─── Coleta de dados Garmin ────────────────────────────────────────────────────
