@@ -400,7 +400,7 @@ Retorne APENAS o JSON, sem markdown, sem explicações."""
     except:
         analysis = {"raw": raw}
 
-return {"analysis": analysis, "readiness_report": report, "raw_data": data, "generated_at": datetime.now().isoformat()}
+        return {"analysis": analysis, "readiness_report": report, "raw_data": data, "generated_at": datetime.now().isoformat()}
 
 # ─── Gerar planilha Excel ──────────────────────────────────────────────────────
 @app.get("/export/excel")
