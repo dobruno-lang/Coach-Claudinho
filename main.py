@@ -1,3 +1,4 @@
+from readiness import build_readiness_report
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -352,7 +353,7 @@ async def sync_all(days: int = 7):
 @app.post("/analyze")
 async def analyze(days: int = 7):
     data = await sync_all(days)
-
+report = build_readiness_report(data.get("whoop", {}))
     ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
@@ -399,7 +400,7 @@ Retorne APENAS o JSON, sem markdown, sem explicações."""
     except:
         analysis = {"raw": raw}
 
-    return {"analysis": analysis, "raw_data": data, "generated_at": datetime.now().isoformat()}
+return {"analysis": analysis, "readiness_report": report, "raw_data": data, "generated_at": datetime.now().isoformat()}
 
 # ─── Gerar planilha Excel ──────────────────────────────────────────────────────
 @app.get("/export/excel")
