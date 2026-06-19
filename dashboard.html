@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coach Claudinho</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f13;
+    --bg2: #17171d;
+    --bg3: #1f1f27;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f5;
+    --text2: #9090a0;
+    --text3: #5a5a6a;
+    --accent: #4f8ef7;
+    --accent-bg: rgba(79,142,247,0.12);
+    --green: #3ecf8e;
+    --green-bg: rgba(62,207,142,0.12);
+    --yellow: #f5c542;
+    --yellow-bg: rgba(245,197,66,0.12);
+    --red: #f05252;
+    --red-bg: rgba(240,82,82,0.12);
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── Layout ── */
+  .sidebar {
+    position: fixed; top: 0; left: 0;
+    width: 220px; height: 100vh;
+    background: var(--bg2);
+    border-right: 0.5px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 20px 14px;
+    z-index: 100;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 4px; margin-bottom: 28px;
+  }
+  .sidebar-logo .icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--accent-bg); border: 0.5px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 18px;
+  }
+  .sidebar-logo .name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .sidebar-logo .version { font-size: 11px; color: var(--text3); }
+
+  .nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 4px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: 13px; color: var(--text2);
+    border: none; background: none; width: 100%; text-align: left;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--accent-bg); color: var(--accent); }
+  .nav-item i { font-size: 17px; flex-shrink: 0; }
+
+  .main { margin-left: 220px; padding: 28px 32px; max-width: 1100px; }
+
+  /* ── Topbar ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .topbar-left h1 { font-size: 20px; font-weight: 600; color: var(--text); }
+  .topbar-left p { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .topbar-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; font-size: 13px; border-radius: 8px;
+    border: 0.5px solid var(--border2); background: transparent;
+    color: var(--text); cursor: pointer; transition: background 0.15s;
+  }
+  .btn:hover { background: var(--bg3); }
+  .btn-accent { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+  .btn-accent:hover { opacity: 0.85; }
+  .btn i { font-size: 16px; }
+
+  select.select {
+    padding: 7px 12px; font-size: 13px; border-radius: 8px;
+    border: 0.5px solid var(--border2); background: var(--bg2);
+    color: var(--text); cursor: pointer;
+  }
+
+  /* ── Flash ── */
+  #flash { min-height: 0; margin-bottom: 0; }
+  .flash-box {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+  }
+  .flash-ok  { background: var(--green-bg); color: var(--green); border: 0.5px solid rgba(62,207,142,0.3); }
+  .flash-err { background: var(--red-bg);   color: var(--red);   border: 0.5px solid rgba(240,82,82,0.3); }
+
+  /* ── Conn cards ── */
+  .conn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .conn-card {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg); padding: 16px;
+  }
+  .conn-card.connected { border-color: rgba(62,207,142,0.3); }
+  .conn-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .conn-info { display: flex; align-items: center; gap: 8px; }
+  .conn-info i { font-size: 19px; color: var(--text2); }
+  .conn-name { font-size: 14px; font-weight: 500; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border2); }
+  .dot-ok { background: var(--green); }
+  .conn-expires { font-size: 11px; color: var(--text3); margin-bottom: 12px; min-height: 16px; }
+  .conn-btn {
+    width: 100%; padding: 6px 0; font-size: 12px; border-radius: 7px;
+    border: 0.5px solid var(--border2); background: transparent;
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .conn-btn:hover { background: var(--bg3); color: var(--text); }
+  .conn-btn-connect { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+  .conn-btn-connect:hover { opacity: 0.85; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 2px; border-bottom: 0.5px solid var(--border); margin-bottom: 20px; }
+  .tab-btn {
+    padding: 9px 18px; font-size: 13px; cursor: pointer;
+    border: none; background: none; color: var(--text2);
+    border-bottom: 2px solid transparent; margin-bottom: -0.5px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+  /* ── Metric cards ── */
+  .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .metric-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+  .metric-value { font-size: 22px; font-weight: 600; }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 11px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  }
+  .badge-green  { background: var(--green-bg);  color: var(--green);  }
+  .badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
+  .badge-red    { background: var(--red-bg);    color: var(--red);    }
+  .badge-blue   { background: var(--accent-bg); color: var(--accent); }
+
+  /* ── Cards ── */
+  .card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 14px; }
+  .card-title { font-size: 14px; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .card-title i { font-size: 17px; color: var(--text2); }
+
+  /* ── Insights ── */
+  .insight-item { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; color: var(--text); line-height: 1.5; }
+  .insight-item:last-child { border-bottom: none; }
+  .insight-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 6px; }
+
+  /* ── Alert ── */
+  .alert-bar { background: var(--yellow-bg); border: 0.5px solid rgba(245,197,66,0.3); border-radius: 8px; padding: 11px 14px; font-size: 13px; color: var(--yellow); margin-bottom: 16px; display: flex; gap: 8px; align-items: flex-start; }
+
+  /* ── Plano table ── */
+  .plan-wrap { overflow-x: auto; }
+  table.plan { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.plan th { text-align: left; padding: 9px 12px; color: var(--text2); font-weight: 500; border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+  table.plan td { padding: 11px 12px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: top; }
+  table.plan tr:last-child td { border-bottom: none; }
+  table.plan tr:hover td { background: var(--bg3); }
+
+  .tipo-badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .t-facil      { background: var(--green-bg);  color: var(--green);  }
+  .t-intervalado{ background: var(--red-bg);    color: var(--red);    }
+  .t-tempo      { background: var(--yellow-bg); color: var(--yellow); }
+  .t-long       { background: var(--accent-bg); color: var(--accent); }
+  .t-forca      { background: var(--bg3); color: var(--text2); }
+  .t-descanso   { background: var(--bg3); color: var(--text3); }
+
+  .zona-tag { font-size: 11px; background: var(--bg3); color: var(--text2); padding: 2px 7px; border-radius: 5px; }
+
+  /* ── Loading / empty ── */
+  .empty { text-align: center; padding: 40px 20px; color: var(--text2); font-size: 14px; }
+  .empty i { font-size: 36px; display: block; margin-bottom: 10px; color: var(--text3); }
+
+  /* ── Raw JSON ── */
+  pre.raw { font-size: 11px; line-height: 1.6; color: var(--text2); overflow: auto; max-height: 500px; background: var(--bg); border-radius: 8px; padding: 14px; }
+
+  /* ── Footer ── */
+  .footer { margin-top: 40px; padding-top: 16px; border-top: 0.5px solid var(--border); font-size: 11px; color: var(--text3); text-align: center; }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="icon"><i class="ti ti-run"></i></div>
+    <div>
+      <div class="name">Coach Claudinho</div>
+      <div class="version">v1.0</div>
+    </div>
+  </div>
+
+  <div class="nav-section">Menu</div>
+  <button class="nav-item active" onclick="showPage('dashboard',this)"><i class="ti ti-dashboard"></i> Dashboard</button>
+  <button class="nav-item" onclick="showPage('conexoes',this)"><i class="ti ti-plug"></i> Conexões</button>
+  <button class="nav-item" onclick="showPage('relatorio',this)"><i class="ti ti-mail"></i> Relatório diário</button>
+
+  <div style="flex:1"></div>
+  <div style="font-size:11px;color:var(--text3);padding:0 4px">
+    <span id="sidebar-status">Verificando API...</span>
+  </div>
+</nav>
+
+<div class="main">
+
+  <!-- ───── DASHBOARD ───── -->
+  <div id="page-dashboard">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Dashboard</h1>
+        <p id="last-update">Carregando...</p>
+      </div>
+      <div class="topbar-right">
+        <select class="select" id="days-select">
+          <option value="7">7 dias</option>
+          <option value="14">14 dias</option>
+          <option value="21">21 dias</option>
+        </select>
+        <button class="btn" onclick="syncData()"><i class="ti ti-database"></i> Sync</button>
+        <button class="btn btn-accent" onclick="runAnalyze()"><i class="ti ti-brain"></i> Analisar</button>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('resumo',this)">Resumo</button>
+      <button class="tab-btn" onclick="switchTab('plano',this)">Plano semanal</button>
+      <button class="tab-btn" onclick="switchTab('raw',this)">Dados brutos</button>
+    </div>
+
+    <div id="tab-resumo">
+      <div id="resumo-content">
+        <div class="empty"><i class="ti ti-brain"></i>Clique em "Analisar" para gerar o plano com IA</div>
+      </div>
+    </div>
+    <div id="tab-plano" style="display:none">
+      <div id="plano-content">
+        <div class="empty"><i class="ti ti-calendar-week"></i>Gere uma análise primeiro</div>
+      </div>
+    </div>
+    <div id="tab-raw" style="display:none">
+      <div id="raw-content">
+        <div class="empty"><i class="ti ti-database"></i>Faça um sync para ver os dados</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── CONEXÕES ───── -->
+  <div id="page-conexoes" style="display:none">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Conexões OAuth</h1>
+        <p>Autorize os providers para coletar dados</p>
+      </div>
+      <div class="topbar-right">
+        <button class="btn" onclick="loadStatus()"><i class="ti ti-refresh"></i> Atualizar status</button>
+      </div>
+    </div>
+
+    <div id="flash2"></div>
+
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--text2);margin-bottom:20px;display:flex;gap:10px;align-items:flex-start;">
+      <i class="ti ti-info-circle" style="font-size:17px;flex-shrink:0;margin-top:1px"></i>
+      Clicar em "Conectar" abre a página de autorização do provider. Após autorizar, volte aqui e clique em "Atualizar status".
+    </div>
+
+    <div class="conn-grid" id="conn-grid">
+      <!-- preenchido por JS -->
+    </div>
+  </div>
+
+  <!-- ───── RELATÓRIO ───── -->
+  <div id="page-relatorio" style="display:none">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Relatório diário</h1>
+        <p>Preview e disparo manual do email</p>
+      </div>
+      <div class="topbar-right">
+        <button class="btn" onclick="previewReport()"><i class="ti ti-eye"></i> Preview</button>
+        <button class="btn btn-accent" onclick="sendReport()"><i class="ti ti-mail"></i> Enviar email</button>
+      </div>
+    </div>
+    <div id="flash3"></div>
+    <div id="report-content">
+      <div class="empty"><i class="ti ti-mail"></i>Clique em "Preview" para gerar o relatório de hoje</div>
+    </div>
+  </div>
+
+  <div class="footer">Coach Claudinho · WHOOP + Garmin + COROS + Strava → Claude AI</div>
+</div>
+
+<script>
+const API = "";  // vazio = mesma origem (FastAPI serve este arquivo)
+
+const PROVIDERS = {
+  whoop:  { icon: 'ti-activity',     label: 'WHOOP'  },
+  garmin: { icon: 'ti-device-watch', label: 'Garmin' },
+  strava: { icon: 'ti-bike',         label: 'Strava' },
+  coros:  { icon: 'ti-gps',          label: 'COROS'  },
+};
+
+/* ── Utils ── */
+function getDays() { return parseInt(document.getElementById('days-select').value); }
+
+function flash(msg, type, elId='flash') {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const cls = type === 'err' ? 'flash-err' : 'flash-ok';
+  const icon = type === 'err' ? 'ti-alert-circle' : 'ti-circle-check';
+  el.innerHTML = `<div class="flash-box ${cls}"><i class="ti ${icon}"></i>${msg}</div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 6000);
+}
+
+function fmt(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    const d = new Date(isoStr);
+    return 'Expira ' + d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  } catch { return '—'; }
+}
+
+/* ── Navigation ── */
+function showPage(name, el) {
+  ['dashboard','conexoes','relatorio'].forEach(p => {
+    document.getElementById('page-'+p).style.display = p===name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  if (name === 'conexoes') loadStatus();
+}
+
+/* ── Tabs ── */
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['resumo','plano','raw'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===name ? 'block' : 'none';
+  });
+}
+
+/* ── Status ── */
+async function loadStatus() {
+  document.getElementById('sidebar-status').textContent = 'Verificando...';
+  buildConnGrid();
+  try {
+    const r = await fetch(API+'/status');
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    let ok = 0;
+    Object.keys(PROVIDERS).forEach(p => {
+      const info = d[p]||{};
+      updateCard(p, !!info.connected, info.expires_at||null);
+      if (info.connected) ok++;
+    });
+    document.getElementById('sidebar-status').textContent = ok + '/4 conectados';
+    document.getElementById('last-update') && (document.getElementById('last-update').textContent = 'Status: '+new Date().toLocaleTimeString('pt-BR'));
+  } catch(e) {
+    document.getElementById('sidebar-status').textContent = 'API offline';
+    flash('Não foi possível alcançar a API: '+e.message, 'err', 'flash2');
+  }
+}
+
+function buildConnGrid() {
+  const grid = document.getElementById('conn-grid');
+  grid.innerHTML = Object.entries(PROVIDERS).map(([p, info]) => `
+    <div class="conn-card" id="card-${p}">
+      <div class="conn-top">
+        <div class="conn-info"><i class="ti ${info.icon}"></i><span class="conn-name">${info.label}</span></div>
+        <div class="dot" id="dot-${p}"></div>
+      </div>
+      <div class="conn-expires" id="exp-${p}">Verificando...</div>
+      <button class="conn-btn conn-btn-connect" id="btn-${p}" onclick="connectProvider('${p}')">
+        <i class="ti ti-link"></i> Conectar
+      </button>
+    </div>`).join('');
+}
+
+function updateCard(p, connected, expiresAt) {
+  const dot = document.getElementById('dot-'+p);
+  const exp = document.getElementById('exp-'+p);
+  const btn = document.getElementById('btn-'+p);
+  const card = document.getElementById('card-'+p);
+  if (!dot) return;
+  dot.className = 'dot ' + (connected ? 'dot-ok' : '');
+  exp.textContent = connected ? fmt(expiresAt) : 'Não conectado';
+  if (connected) {
+    card.classList.add('connected');
+    btn.className = 'conn-btn';
+    btn.innerHTML = '<i class="ti ti-refresh"></i> Reconectar';
+  } else {
+    card.classList.remove('connected');
+    btn.className = 'conn-btn conn-btn-connect';
+    btn.innerHTML = '<i class="ti ti-link"></i> Conectar';
+  }
+  btn.onclick = () => connectProvider(p);
+}
+
+function connectProvider(p) {
+  flash('Abrindo autorização do '+PROVIDERS[p].label+'... Após autorizar, clique em "Atualizar status".', 'ok', 'flash2');
+  window.open(API+'/auth/'+p, '_blank');
+}
+
+/* ── Sync ── */
+async function syncData() {
+  document.getElementById('raw-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Sincronizando dados...</div>';
+  switchTab('raw', document.querySelectorAll('.tab-btn')[2]);
+  try {
+    const r = await fetch(API+'/sync?days='+getDays(), {method:'POST'});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    document.getElementById('raw-content').innerHTML =
+      `<div class="card"><div class="card-title"><i class="ti ti-database"></i>Dados brutos — ${new Date().toLocaleString('pt-BR')}</div><pre class="raw">${JSON.stringify(d,null,2)}</pre></div>`;
+    document.getElementById('last-update').textContent = 'Sync: '+new Date().toLocaleTimeString('pt-BR');
+    flash('Sync concluído!', 'ok');
+  } catch(e) {
+    document.getElementById('raw-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro no sync: ${e.message}</div>`;
+  }
+}
+
+/* ── Analyze ── */
+function tipoClass(tipo) {
+  if (!tipo) return 't-descanso';
+  const t = tipo.toLowerCase();
+  if (t.includes('fácil')||t.includes('facil')) return 't-facil';
+  if (t.includes('intervalado')) return 't-intervalado';
+  if (t.includes('tempo')) return 't-tempo';
+  if (t.includes('long')) return 't-long';
+  if (t.includes('força')||t.includes('forca')) return 't-forca';
+  return 't-descanso';
+}
+
+async function runAnalyze() {
+  document.getElementById('resumo-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Analisando com IA — pode levar alguns segundos...</div>';
+  document.getElementById('plano-content').innerHTML  = '<div class="empty"><i class="ti ti-loader"></i>Aguardando análise...</div>';
+  try {
+    const r = await fetch(API+'/analyze?days='+getDays(), {method:'POST'});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    const a = data.analysis;
+    if (!a || a.raw) { document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Resposta inesperada da API.</div>`; return; }
+
+    const statusClass = {verde:'badge-green',amarelo:'badge-yellow',vermelho:'badge-red'}[a.estado_recovery||'verde']||'badge-green';
+    const alertHtml = a.alerta ? `<div class="alert-bar"><i class="ti ti-alert-triangle"></i><span>${a.alerta}</span></div>` : '';
+    const insightsHtml = (a.insights||[]).map(i=>`<div class="insight-item"><div class="insight-dot"></div><span>${i}</span></div>`).join('');
+
+    document.getElementById('resumo-content').innerHTML = `
+      ${alertHtml}
+      <div class="metrics-row">
+        <div class="metric-card"><div class="metric-label">Recovery</div><div class="metric-value"><span class="badge ${statusClass}">${(a.estado_recovery||'–').toUpperCase()}</span></div></div>
+        <div class="metric-card"><div class="metric-label">Carga da semana</div><div class="metric-value" style="font-size:16px;margin-top:6px">${a.carga_semana||'–'}</div></div>
+        <div class="metric-card"><div class="metric-label">Treinos no plano</div><div class="metric-value">${(a.plano_semana||[]).length}</div></div>
+      </div>
+      <div class="card"><div class="card-title"><i class="ti ti-file-text"></i>Resumo</div><p style="font-size:14px;color:var(--text);line-height:1.7">${a.resumo||''}</p></div>
+      <div class="card"><div class="card-title"><i class="ti ti-bulb"></i>Insights</div>${insightsHtml}</div>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <button class="btn" onclick="exportExcel()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
+      </div>`;
+
+    const rows = (a.plano_semana||[]).map(t=>`
+      <tr>
+        <td style="font-weight:500;white-space:nowrap">${t.dia||''}</td>
+        <td style="color:var(--text2);white-space:nowrap">${t.data||''}</td>
+        <td><span class="tipo-badge ${tipoClass(t.tipo)}">${t.tipo||'–'}</span></td>
+        <td style="min-width:180px;line-height:1.5">${t.descricao||''}</td>
+        <td style="text-align:center;white-space:nowrap">${t.duracao_min?t.duracao_min+' min':'–'}</td>
+        <td style="text-align:center;white-space:nowrap">${t.distancia_km?t.distancia_km+' km':'–'}</td>
+        <td style="text-align:center"><span class="zona-tag">${t.zona_fc||'–'}</span></td>
+        <td style="font-size:12px;color:var(--text2);line-height:1.4">${t.justificativa||''}</td>
+      </tr>`).join('');
+
+    document.getElementById('plano-content').innerHTML = `
+      <div class="card"><div class="card-title"><i class="ti ti-calendar-week"></i>Plano da semana</div>
+      <div class="plan-wrap"><table class="plan">
+        <thead><tr><th>Dia</th><th>Data</th><th>Tipo</th><th>Descrição</th><th>Duração</th><th>Distância</th><th>Zona FC</th><th>Justificativa</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div></div>`;
+
+    document.getElementById('last-update').textContent = 'Análise: '+new Date().toLocaleTimeString('pt-BR');
+    flash('Análise concluída!', 'ok');
+  } catch(e) {
+    document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro: ${e.message}</div>`;
+  }
+}
+
+function exportExcel() { window.open(API+'/export/excel?days='+getDays(), '_blank'); }
+
+/* ── Relatório diário ── */
+async function previewReport() {
+  document.getElementById('report-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Gerando relatório...</div>';
+  try {
+    const r = await fetch(API+'/report/preview');
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const rep = await r.json();
+    renderReport(rep);
+  } catch(e) {
+    document.getElementById('report-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro: ${e.message}</div>`;
+  }
+}
+
+async function sendReport() {
+  flash('Gerando e enviando email...', 'ok', 'flash3');
+  try {
+    const r = await fetch(API+'/report/daily', {method:'POST'});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    flash('Email enviado com sucesso!', 'ok', 'flash3');
+    renderReport(d.report);
+  } catch(e) {
+    flash('Erro ao enviar: '+e.message, 'err', 'flash3');
+  }
+}
+
+function renderReport(rep) {
+  const sono = rep.sono||{};
+  const rec  = rep.recovery||{};
+  const treino = rep.recomendacao_treino||{};
+  const dicas  = rep.dicas_do_dia||[];
+  const alertHtml = rep.alerta ? `<div class="alert-bar"><i class="ti ti-alert-triangle"></i><span>${rep.alerta}</span></div>` : '';
+  const recClass = {verde:'badge-green',amarelo:'badge-yellow',vermelho:'badge-red'}[rec.status||'verde']||'badge-green';
+  const sonoClass = {boa:'badge-green',regular:'badge-yellow',ruim:'badge-red'}[sono.qualidade||'boa']||'badge-green';
+
+  document.getElementById('report-content').innerHTML = `
+    ${alertHtml}
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><i class="ti ti-moon"></i>Sono — ${rep.data||''}</div>
+      <div class="metrics-row" style="margin-bottom:12px">
+        <div class="metric-card"><div class="metric-label">Duração</div><div class="metric-value">${sono.duracao_horas||'–'}h</div></div>
+        <div class="metric-card"><div class="metric-label">Qualidade</div><div class="metric-value"><span class="badge ${sonoClass}">${(sono.qualidade||'–').toUpperCase()}</span></div></div>
+        <div class="metric-card"><div class="metric-label">Nota</div><div class="metric-value">${sono.nota||'–'}</div></div>
+        <div class="metric-card"><div class="metric-label">REM</div><div class="metric-value" style="font-size:18px">${sono.estagio_rem_min||'–'} min</div></div>
+        <div class="metric-card"><div class="metric-label">Profundo</div><div class="metric-value" style="font-size:18px">${sono.estagio_deep_min||'–'} min</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6">${sono.analise||''}</p>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><i class="ti ti-bolt"></i>Recovery</div>
+      <div class="metrics-row" style="margin-bottom:12px">
+        <div class="metric-card"><div class="metric-label">Score</div><div class="metric-value"><span class="badge ${recClass}">${rec.score||'–'}%</span></div></div>
+        <div class="metric-card"><div class="metric-label">HRV</div><div class="metric-value">${rec.hrv||'–'}</div></div>
+        <div class="metric-card"><div class="metric-label">FC repouso</div><div class="metric-value">${rec.fc_repouso||'–'}</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6">${rec.analise||''}</p>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><i class="ti ti-target"></i>Treino de hoje</div>
+      <div style="background:var(--accent-bg);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:600;color:var(--accent);margin-bottom:4px">${treino.tipo||''}</div>
+        <div style="font-size:13px;color:var(--text2)">${treino.descricao||''}</div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric-card"><div class="metric-label">Duração</div><div class="metric-value" style="font-size:18px">${treino.duracao_min||'–'} min</div></div>
+        <div class="metric-card"><div class="metric-label">Distância</div><div class="metric-value" style="font-size:18px">${treino.distancia_km||'–'} km</div></div>
+        <div class="metric-card"><div class="metric-label">Zona FC</div><div class="metric-value" style="font-size:18px"><span class="zona-tag">${treino.zona_fc||'–'}</span></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-bulb"></i>Dicas do dia</div>
+      ${dicas.map(d=>`<div class="insight-item"><div class="insight-dot"></div><span>${d}</span></div>`).join('')}
+    </div>`;
+}
+
+/* ── Init ── */
+buildConnGrid();
+loadStatus();
+</script>
+</body>
+</html>
