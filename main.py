@@ -823,3 +823,17 @@ async def report_preview():
 async def dashboard():
     from fastapi.responses import FileResponse
     return FileResponse("dashboard.html")
+
+@app.get("/debug/whoop")
+async def debug_whoop():
+    token = await valid_token("whoop")
+    if not token:
+        return {"error": "sem token"}
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{WHOOP_API_BASE}/recovery", headers=headers, params={"limit": 5})
+    return {
+        "status_code": r.status_code,
+        "body": r.text[:1000],
+        "url": str(r.url)
+    }
