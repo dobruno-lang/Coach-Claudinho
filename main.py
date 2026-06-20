@@ -838,3 +838,30 @@ async def debug_claude():
     )
     t1 = time.time()
     return {"seconds": round(t1 - t0, 2), "response": msg.content[0].text}
+
+@app.get("/debug/analyze_steps")
+async def debug_analyze_steps(days: int = 7):
+    import time
+    steps = {}
+
+    t0 = time.time()
+    whoop = await fetch_whoop_data(days)
+    steps["whoop"] = round(time.time() - t0, 2)
+
+    t0 = time.time()
+    garmin = await fetch_garmin_data(days)
+    steps["garmin"] = round(time.time() - t0, 2)
+
+    t0 = time.time()
+    strava = await fetch_strava_data(days)
+    steps["strava"] = round(time.time() - t0, 2)
+
+    t0 = time.time()
+    coros = await fetch_coros_data(days)
+    steps["coros"] = round(time.time() - t0, 2)
+
+    t0 = time.time()
+    report = build_readiness_report(whoop)
+    steps["readiness"] = round(time.time() - t0, 2)
+
+    return {"steps": steps}
