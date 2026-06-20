@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import anthropic
 import asyncpg
+import asyncio
 from contextlib import asynccontextmanager
 
 load_dotenv()
@@ -672,19 +673,7 @@ def build_email_html(report: dict) -> str:
       </div>
       <p style="color:#C8D0E0;margin:0;font-size:15px;line-height:1.6;">{report.get("resumo_executivo", "")}</p>
     </div>
-
-@app.get("/debug/claude")
-async def debug_claude():
-    import time
-    t0 = time.time()
-    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    msg = ai.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=50,
-        messages=[{"role": "user", "content": "responda apenas: ok"}]
-    )
-    t1 = time.time()
-    return {"seconds": round(t1 - t0, 2), "response": msg.content[0].text}
+    
     {alerta_html}
 
     <!-- Sono -->
@@ -837,30 +826,15 @@ async def dashboard():
     from fastapi.responses import FileResponse
     return FileResponse("dashboard.html")
 
-@app.get("/debug/whoop")
-async def debug_whoop():
-    token = await valid_token("whoop")
-    if not token:
-        return {"error": "sem token"}
-    headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{WHOOP_API_BASE}/recovery", headers=headers, params={"limit": 5})
-    return {
-        "status_code": r.status_code,
-        "body": r.text[:1000],
-        "url": str(r.url)
-    }
-
-@app.get("/debug/readiness")
-async def debug_readiness(days: int = 7):
+@app.get("/debug/claude")
+async def debug_claude():
     import time
     t0 = time.time()
-    whoop = await fetch_whoop_data(days)
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    msg = ai.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=50,
+        messages=[{"role": "user", "content": "responda apenas: ok"}]
+    )
     t1 = time.time()
-    report = build_readiness_report(whoop)
-    t2 = time.time()
-    return {
-        "fetch_whoop_seconds": round(t1 - t0, 2),
-        "build_report_seconds": round(t2 - t1, 2),
-        "report": report,
-    }
+    return {"seconds": round(t1 - t0, 2), "response": msg.content[0].text}
