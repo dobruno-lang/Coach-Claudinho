@@ -838,3 +838,17 @@ async def debug_whoop():
         "body": r.text[:1000],
         "url": str(r.url)
     }
+
+@app.get("/debug/readiness")
+async def debug_readiness(days: int = 7):
+    import time
+    t0 = time.time()
+    whoop = await fetch_whoop_data(days)
+    t1 = time.time()
+    report = build_readiness_report(whoop)
+    t2 = time.time()
+    return {
+        "fetch_whoop_seconds": round(t1 - t0, 2),
+        "build_report_seconds": round(t2 - t1, 2),
+        "report": report,
+    }
