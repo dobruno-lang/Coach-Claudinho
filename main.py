@@ -865,3 +865,64 @@ async def debug_analyze_steps(days: int = 7):
     steps["readiness"] = round(time.time() - t0, 2)
 
     return {"steps": steps}
+
+@app.get("/debug/analyze_full")
+async def debug_analyze_full(days: int = 7):
+    import time
+    t0 = time.time()
+    data = await sync_all(days)
+    t1 = time.time()
+
+    report = build_readiness_report(data.get("whoop", {}))
+    t2 = time.time()
+
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
+Analise os dados abaixo dos últimos {days} dias e retorne um JSON com esta estrutura exata:
+
+{{
+  "resumo": "análise geral em 2-3 frases",
+  "estado_recovery": "verde|amarelo|vermelho",
+  "carga_semana": "baixa|moderada|alta|muito_alta",
+  "insights": ["insight 1", "insight 2", "insight 3"],
+  "alerta": "alerta importante se houver, ou null",
+  "plano_semana": [
+    {{
+      "dia": "Segunda",
+      "data": "YYYY-MM-DD",
+      "tipo": "Corrida fácil|Intervalado|Tempo run|Long run|Força|Descanso ativo|Descanso",
+      "descricao": "detalhes do treino",
+      "duracao_min": 45,
+      "distancia_km": 8.0,
+      "zona_fc": "Z1-Z2",
+      "intensidade": "leve|moderada|alta",
+      "justificativa": "por que esse treino hoje"
+    }}
+  ]
+}}
+
+Dados disponíveis:
+WHOOP: {json.dumps(data.get('whoop', {}), ensure_ascii=False, default=str)[:3000]}
+GARMIN: {json.dumps(data.get('garmin', {}), ensure_ascii=False, default=str)[:2000]}
+STRAVA (atividades recentes): {json.dumps(data.get('strava', [])[:5], ensure_ascii=False, default=str)[:2000]}
+COROS (corridas recentes): {json.dumps(data.get('coros', [])[:5], ensure_ascii=False, default=str)[:2000]}
+
+Retorne APENAS o JSON, sem markdown, sem explicações."""
+
+    t3 = time.time()
+    msg = ai.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    t4 = time.time()
+
+    return {
+        "sync_seconds": round(t1 - t0, 2),
+        "readiness_seconds": round(t2 - t1, 2),
+        "prompt_build_seconds": round(t3 - t2, 2),
+        "prompt_length_chars": len(prompt),
+        "claude_call_seconds": round(t4 - t3, 2),
+        "response_preview": msg.content[0].text[:200],
+    }
