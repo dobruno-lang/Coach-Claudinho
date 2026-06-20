@@ -673,6 +673,18 @@ def build_email_html(report: dict) -> str:
       <p style="color:#C8D0E0;margin:0;font-size:15px;line-height:1.6;">{report.get("resumo_executivo", "")}</p>
     </div>
 
+@app.get("/debug/claude")
+async def debug_claude():
+    import time
+    t0 = time.time()
+    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    msg = ai.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=50,
+        messages=[{"role": "user", "content": "responda apenas: ok"}]
+    )
+    t1 = time.time()
+    return {"seconds": round(t1 - t0, 2), "response": msg.content[0].text}
     {alerta_html}
 
     <!-- Sono -->
