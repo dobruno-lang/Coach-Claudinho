@@ -386,6 +386,16 @@ async def run_analysis_job(job_id: str, days: int):
     try:
         data = await sync_all(days)
         report = build_readiness_report(data.get("whoop", {}))
+        conn = await get_db()
+        bodycomp_rows = await conn.fetch("""
+            SELECT * FROM body_composition ORDER BY exam_date DESC LIMIT 10
+        """)
+        await conn.close()
+        bodycomp_history = [dict(r) for r in bodycomp_rows]
+        for h in bodycomp_history:
+            h["exam_date"] = h["exam_date"].isoformat() if h["exam_date"] else None
+            h["created_at"] = h["created_at"].isoformat() if h["created_at"] else None
+        bodycomp_trend = build_trend_summary(bodycomp_history)
         ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
@@ -397,6 +407,7 @@ Analise os dados abaixo dos últimos {days} dias e retorne um JSON com esta estr
   "carga_semana": "baixa|moderada|alta|muito_alta",
   "insights": ["insight 1", "insight 2", "insight 3"],
   "alerta": "alerta importante se houver, ou null",
+  "composicao_corporal": "comentário sobre a tendência de peso/gordura/músculo se houver dados, ou null",
   "plano_semana": [
     {{
       "dia": "Segunda",
@@ -412,7 +423,11 @@ Analise os dados abaixo dos últimos {days} dias e retorne um JSON com esta estr
   ]
 }}
 
+Composição corporal (histórico de exames InBody, mais recente primeiro):
+{json.dumps(bodycomp_trend, ensure_ascii=False, default=str)[:1500]}
+
 Dados disponíveis:
+WHOOP: {json.dumps(data.get('whoop', {}), ensure_ascii=False, default=str)[:3000]}
 WHOOP: {json.dumps(data.get('whoop', {}), ensure_ascii=False, default=str)[:3000]}
 GARMIN: {json.dumps(data.get('garmin', {}), ensure_ascii=False, default=str)[:2000]}
 STRAVA (atividades recentes): {json.dumps(data.get('strava', [])[:5], ensure_ascii=False, default=str)[:2000]}
