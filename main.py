@@ -1,5 +1,6 @@
 from readiness import build_readiness_report
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from bodycomp import extract_inbody_data, validate_inbody_data, build_trend_summary
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 import httpx
@@ -46,6 +47,26 @@ async def init_db():
             garmin_stress FLOAT,
             garmin_steps INT,
             garmin_hrv FLOAT,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS body_composition (
+            id SERIAL PRIMARY KEY,
+            exam_date DATE NOT NULL,
+            exam_time TEXT,
+            weight_kg FLOAT,
+            body_water_l FLOAT,
+            protein_kg FLOAT,
+            minerals_kg FLOAT,
+            fat_mass_kg FLOAT,
+            skeletal_muscle_mass_kg FLOAT,
+            bmi FLOAT,
+            body_fat_pct FLOAT,
+            inbody_score INT,
+            fat_free_mass_kg FLOAT,
+            basal_metabolic_rate_kcal INT,
+            visceral_fat_level INT,
+            waist_hip_ratio FLOAT,
+            smi FLOAT,
             created_at TIMESTAMP DEFAULT NOW()
         );
     """)
@@ -954,3 +975,60 @@ Retorne APENAS o JSON, sem markdown, sem explicações."""
         "claude_call_seconds": round(t4 - t3, 2),
         "response_preview": msg.content[0].text[:200],
     }
+
+@app.post("/upload/inbody")
+async def upload_inbody(file: UploadFile = File(...)):
+    image_bytes = await file.read()
+    media_type = file.content_type or "image/jpeg"
+
+    extracted = extract_inbody_data(image_bytes, media_type)
+    if "error" in extracted:
+        raise HTTPException(status_code=422, detail=extracted)
+
+    is_valid, warnings = validate_inbody_data(extracted)
+
+    conn = await get_db()
+    await conn.execute("""
+        INSERT INTO body_composition (
+            exam_date, exam_time, weight_kg, body_water_l, protein_kg,
+            minerals_kg, fat_mass_kg, skeletal_muscle_mass_kg, bmi,
+            body_fat_pct, inbody_score, fat_free_mass_kg,
+            basal_metabolic_rate_kcal, visceral_fat_level,
+            waist_hip_ratio, smi
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+    """,
+        extracted.get("exam_date"), extracted.get("exam_time"),
+        extracted.get("weight_kg"), extracted.get("body_water_l"),
+        extracted.get("protein_kg"), extracted.get("minerals_kg"),
+        extracted.get("fat_mass_kg"), extracted.get("skeletal_muscle_mass_kg"),
+        extracted.get("bmi"), extracted.get("body_fat_pct"),
+        extracted.get("inbody_score"), extracted.get("fat_free_mass_kg"),
+        extracted.get("basal_metabolic_rate_kcal"), extracted.get("visceral_fat_level"),
+        extracted.get("waist_hip_ratio"), extracted.get("smi")
+    )
+    await conn.close()
+
+    return {
+        "status": "salvo" if is_valid else "salvo_com_alertas",
+        "extracted": extracted,
+        "warnings": warnings
+    }
+
+
+@app.get("/bodycomp/history")
+async def bodycomp_history(limit: int = 20):
+    conn = await get_db()
+    rows = await conn.fetch("""
+        SELECT * FROM body_composition
+        ORDER BY exam_date DESC
+        LIMIT $1
+    """, limit)
+    await conn.close()
+
+    history = [dict(r) for r in rows]
+    for h in history:
+        h["exam_date"] = h["exam_date"].isoformat() if h["exam_date"] else None
+        h["created_at"] = h["created_at"].isoformat() if h["created_at"] else None
+
+    trend = build_trend_summary(history)
+    return {"history": history, "trend": trend}
