@@ -253,6 +253,7 @@
   <button class="nav-item active" onclick="showPage('dashboard',this)"><i class="ti ti-dashboard"></i> Dashboard</button>
   <button class="nav-item" onclick="showPage('conexoes',this)"><i class="ti ti-plug"></i> Conexões</button>
   <button class="nav-item" onclick="showPage('relatorio',this)"><i class="ti ti-mail"></i> Relatório diário</button>
+  <button class="nav-item" onclick="showPage('bodycomp',this)"><i class="ti ti-scale"></i> Composição corporal</button>
 
   <div style="flex:1"></div>
   <div style="font-size:11px;color:var(--text3);padding:0 4px">
@@ -349,6 +350,23 @@
     </div>
   </div>
 
+  <div id="page-bodycomp" style="display:none">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Composição corporal</h1>
+        <p>Histórico de exames InBody</p>
+      </div>
+      <div class="topbar-right">
+        <input type="file" id="inbody-file" accept="image/*" style="display:none" onchange="uploadInbody(this.files[0])">
+        <button class="btn btn-accent" onclick="document.getElementById('inbody-file').click()"><i class="ti ti-upload"></i> Enviar exame</button>
+      </div>
+    </div>
+    <div id="flash4"></div>
+    <div id="bodycomp-content">
+      <div class="empty"><i class="ti ti-scale"></i>Nenhum exame enviado ainda</div>
+    </div>
+  </div>
+
   <div class="footer">Coach Claudinho · WHOOP + Garmin + COROS + Strava → Claude AI</div>
 </div>
 
@@ -384,12 +402,13 @@ function fmt(isoStr) {
 
 /* ── Navigation ── */
 function showPage(name, el) {
-  ['dashboard','conexoes','relatorio'].forEach(p => {
+  ['dashboard','conexoes','relatorio','bodycomp'].forEach(p => {
     document.getElementById('page-'+p).style.display = p===name ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
   if (name === 'conexoes') loadStatus();
+  if (name === 'bodycomp') loadBodyComp();
 }
 
 /* ── Tabs ── */
@@ -805,6 +824,139 @@ function renderReport(rep) {
       <div class="card-title"><i class="ti ti-bulb"></i>Dicas do dia</div>
       ${dicas.map(d=>`<div class="insight-item"><div class="insight-dot"></div><span>${d}</span></div>`).join('')}
     </div>`;
+}
+
+/* ── Composição corporal ── */
+async function uploadInbody(file) {
+  if (!file) return;
+  document.getElementById('bodycomp-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Lendo o exame com IA — pode levar alguns segundos...</div>';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const r = await fetch(API+'/upload/inbody', {method:'POST', body: formData});
+    const data = await r.json();
+    if (!r.ok) {
+      throw new Error(data.detail?.error || data.detail || 'Erro ao processar o exame');
+    }
+
+    if (data.warnings && data.warnings.length) {
+      flash('Exame salvo com alertas: ' + data.warnings.join('; '), 'err', 'flash4');
+    } else {
+      flash('Exame de ' + (data.extracted.exam_date||'') + ' salvo com sucesso!', 'ok', 'flash4');
+    }
+
+    document.getElementById('inbody-file').value = '';
+    loadBodyComp();
+  } catch(e) {
+    document.getElementById('bodycomp-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro: ${e.message}</div>`;
+  }
+}
+
+function trendArrow(delta, higherIsBetter) {
+  if (delta === null || delta === undefined) return '';
+  const isUp = delta > 0;
+  const good = higherIsBetter ? isUp : !isUp;
+  const color = Math.abs(delta) < 0.05 ? 'var(--text2)' : (good ? 'var(--green)' : 'var(--red)');
+  const icon = delta > 0 ? 'ti-trending-up' : (delta < 0 ? 'ti-trending-down' : 'ti-minus');
+  return `<i class="ti ${icon}" style="color:${color};font-size:13px"></i> <span style="color:${color}">${delta > 0 ? '+' : ''}${delta}</span>`;
+}
+
+let bodyCompChart = null;
+
+async function loadBodyComp() {
+  try {
+    const r = await fetch(API+'/bodycomp/history?limit=30');
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    const history = data.history || [];
+    const trend = data.trend || {};
+
+    if (!history.length) {
+      document.getElementById('bodycomp-content').innerHTML = '<div class="empty"><i class="ti ti-scale"></i>Nenhum exame enviado ainda. Clique em "Enviar exame" para começar.</div>';
+      return;
+    }
+
+    let trendCardsHtml = '';
+    if (trend.variacao_desde_ultimo) {
+      const v = trend.variacao_desde_ultimo;
+      trendCardsHtml = `
+        <div class="metrics-row" style="margin-bottom:20px">
+          <div class="metric-card">
+            <div class="metric-label">Peso vs. último exame</div>
+            <div class="metric-value" style="font-size:18px">${trendArrow(v.peso_kg, null) || '–'} kg</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">% gordura vs. último</div>
+            <div class="metric-value" style="font-size:18px">${trendArrow(v.percentual_gordura, false) || '–'} pp</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Massa muscular vs. último</div>
+            <div class="metric-value" style="font-size:18px">${trendArrow(v.massa_muscular_kg, true) || '–'} kg</div>
+          </div>
+        </div>`;
+    }
+
+    const sorted = [...history].reverse();
+    const labels = sorted.map(h => h.exam_date ? h.exam_date.split('-').reverse().slice(0,2).join('/') : '–');
+    const weightSeries = sorted.map(h => h.weight_kg);
+    const fatPctSeries = sorted.map(h => h.body_fat_pct);
+    const muscleSeries = sorted.map(h => h.skeletal_muscle_mass_kg);
+
+    const rows = history.map(h => `
+      <tr>
+        <td style="white-space:nowrap">${h.exam_date||'–'}</td>
+        <td style="text-align:center">${h.weight_kg ?? '–'}</td>
+        <td style="text-align:center">${h.body_fat_pct ?? '–'}%</td>
+        <td style="text-align:center">${h.skeletal_muscle_mass_kg ?? '–'}</td>
+        <td style="text-align:center">${h.visceral_fat_level ?? '–'}</td>
+        <td style="text-align:center">${h.bmi ?? '–'}</td>
+        <td style="text-align:center"><span class="badge badge-blue">${h.inbody_score ?? '–'}</span></td>
+      </tr>`).join('');
+
+    document.getElementById('bodycomp-content').innerHTML = `
+      ${trendCardsHtml}
+      <div class="chart-card" style="margin-bottom:20px">
+        <div class="chart-card-title"><i class="ti ti-chart-line"></i>Evolução</div>
+        <div class="chart-card-sub">Peso, massa muscular e % de gordura ao longo do tempo</div>
+        <div class="chart-wrap"><canvas id="chart-bodycomp"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="ti ti-table"></i>Histórico de exames</div>
+        <div class="plan-wrap"><table class="plan">
+          <thead><tr><th>Data</th><th>Peso (kg)</th><th>% gordura</th><th>Massa muscular (kg)</th><th>Gordura visceral</th><th>IMC</th><th>Score InBody</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+
+    const c = {text2:'#9090a0', grid:'rgba(255,255,255,0.06)', teal:'#3ecf8e', amber:'#f5c542', coral:'#e0795a'};
+    if (bodyCompChart) bodyCompChart.destroy();
+    const ctx = document.getElementById('chart-bodycomp').getContext('2d');
+    bodyCompChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Peso (kg)', data: weightSeries, borderColor: c.coral, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, spanGaps: true, tension: 0.3, yAxisID: 'y' },
+          { label: 'Massa muscular (kg)', data: muscleSeries, borderColor: c.teal, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, spanGaps: true, tension: 0.3, yAxisID: 'y' },
+          { label: '% gordura', data: fatPctSeries, borderColor: c.amber, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, spanGaps: true, tension: 0.3, yAxisID: 'y1' },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'bottom', labels: { color: c.text2, font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+        scales: {
+          x: { ticks: { color: c.text2, font: { size: 10 } }, grid: { display: false } },
+          y: { type: 'linear', position: 'left', ticks: { color: c.text2, font: { size: 10 } }, grid: { color: c.grid } },
+          y1: { type: 'linear', position: 'right', ticks: { color: c.text2, font: { size: 10 } }, grid: { display: false } }
+        }
+      }
+    });
+  } catch(e) {
+    document.getElementById('bodycomp-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro ao carregar histórico: ${e.message}</div>`;
+  }
 }
 
 /* ── Init ── */
