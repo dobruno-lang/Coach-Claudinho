@@ -987,6 +987,14 @@ async def upload_inbody(file: UploadFile = File(...)):
 
     is_valid, warnings = validate_inbody_data(extracted)
 
+    exam_date_str = extracted.get("exam_date")
+    exam_date_obj = None
+    if exam_date_str:
+        try:
+            exam_date_obj = datetime.strptime(exam_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            warnings.append(f"exam_date inválido: {exam_date_str}")
+
     conn = await get_db()
     await conn.execute("""
         INSERT INTO body_composition (
@@ -997,7 +1005,7 @@ async def upload_inbody(file: UploadFile = File(...)):
             waist_hip_ratio, smi
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
     """,
-        extracted.get("exam_date"), extracted.get("exam_time"),
+        exam_date_obj, extracted.get("exam_time"),
         extracted.get("weight_kg"), extracted.get("body_water_l"),
         extracted.get("protein_kg"), extracted.get("minerals_kg"),
         extracted.get("fat_mass_kg"), extracted.get("skeletal_muscle_mass_kg"),
