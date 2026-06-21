@@ -65,6 +65,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+analyze_jobs: dict = {}
 
 # ─── WHOOP OAuth ───────────────────────────────────────────────────────────────
 WHOOP_CLIENT_ID     = os.getenv("WHOOP_CLIENT_ID")
@@ -353,11 +354,20 @@ async def sync_all(days: int = 7):
 # ─── Análise com Claude ────────────────────────────────────────────────────────
 @app.post("/analyze")
 async def analyze(days: int = 7):
-    data = await sync_all(days)
-    report = build_readiness_report(data.get("whoop", {}))
-    ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    import uuid
+    job_id = str(uuid.uuid4())
+    analyze_jobs[job_id] = {"status": "processando", "result": None}
+    asyncio.create_task(run_analysis_job(job_id, days))
+    return {"job_id": job_id, "status": "processando"}
 
-    prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
+
+async def run_analysis_job(job_id: str, days: int):
+    try:
+        data = await sync_all(days)
+        report = build_readiness_report(data.get("whoop", {}))
+        ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+        prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
 Analise os dados abaixo dos últimos {days} dias e retorne um JSON com esta estrutura exata:
 
 {{
@@ -389,19 +399,37 @@ COROS (corridas recentes): {json.dumps(data.get('coros', [])[:5], ensure_ascii=F
 
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
-    msg = ai.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
+        msg = ai.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    raw = msg.content[0].text.strip()
-    try:
-        analysis = json.loads(raw)
-    except:
-        analysis = {"raw": raw}
+        raw = msg.content[0].text.strip()
+        try:
+            analysis = json.loads(raw)
+        except Exception:
+            analysis = {"raw": raw}
 
-        return {"analysis": analysis, "readiness_report": report, "raw_data": data, "generated_at": datetime.now().isoformat()}
+        analyze_jobs[job_id] = {
+            "status": "concluido",
+            "result": {
+                "analysis": analysis,
+                "readiness_report": report,
+                "raw_data": data,
+                "generated_at": datetime.now().isoformat(),
+            }
+        }
+    except Exception as e:
+        analyze_jobs[job_id] = {"status": "erro", "error": str(e)}
+
+
+@app.get("/analyze/status/{job_id}")
+async def analyze_status(job_id: str):
+    job = analyze_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job não encontrado")
+    return job
 
 # ─── Gerar planilha Excel ──────────────────────────────────────────────────────
 @app.get("/export/excel")
