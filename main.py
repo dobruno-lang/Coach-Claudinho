@@ -825,7 +825,7 @@ async def send_daily_email(report: dict):
 async def daily_scheduler():
     while True:
         now = datetime.utcnow()
-        target = now.replace(hour=13, minute=0, second=0, microsecond=0)
+        target = now.replace(hour=12, minute=0, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
         wait_seconds = (target - now).total_seconds()
