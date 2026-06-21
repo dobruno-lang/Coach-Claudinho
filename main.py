@@ -399,6 +399,7 @@ async def run_analysis_job(job_id: str, days: int):
         ai = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         prompt = f"""Você é um treinador pessoal especialista em corrida e performance atlética.
+A data de hoje é {datetime.now().strftime('%Y-%m-%d')} ({datetime.now().strftime('%A')}). O plano semanal deve começar a partir de amanhã.
 Analise os dados abaixo dos últimos {days} dias e retorne um JSON com esta estrutura exata:
 
 {{
