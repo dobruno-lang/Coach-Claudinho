@@ -638,56 +638,93 @@ function renderCharts(series) {
   });
 }
 
+function renderAnalysisResult(data) {
+  const a = data.analysis;
+  renderReadiness(data.readiness_report);
+  renderCharts(data.readiness_report ? data.readiness_report.series : null);
+  if (!a || a.raw) { document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Resposta inesperada da API.</div>`; return; }
+
+  const statusClass = {verde:'badge-green',amarelo:'badge-yellow',vermelho:'badge-red'}[a.estado_recovery||'verde']||'badge-green';
+  const alertHtml = a.alerta ? `<div class="alert-bar"><i class="ti ti-alert-triangle"></i><span>${a.alerta}</span></div>` : '';
+  const insightsHtml = (a.insights||[]).map(i=>`<div class="insight-item"><div class="insight-dot"></div><span>${i}</span></div>`).join('');
+
+  document.getElementById('resumo-content').innerHTML = `
+    ${alertHtml}
+    <div class="metrics-row">
+      <div class="metric-card"><div class="metric-label">Recovery</div><div class="metric-value"><span class="badge ${statusClass}">${(a.estado_recovery||'–').toUpperCase()}</span></div></div>
+      <div class="metric-card"><div class="metric-label">Carga da semana</div><div class="metric-value" style="font-size:16px;margin-top:6px">${a.carga_semana||'–'}</div></div>
+      <div class="metric-card"><div class="metric-label">Treinos no plano</div><div class="metric-value">${(a.plano_semana||[]).length}</div></div>
+    </div>
+    <div class="card"><div class="card-title"><i class="ti ti-file-text"></i>Resumo</div><p style="font-size:14px;color:var(--text);line-height:1.7">${a.resumo||''}</p></div>
+    <div class="card"><div class="card-title"><i class="ti ti-bulb"></i>Insights</div>${insightsHtml}</div>
+    <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+      <button class="btn" onclick="exportExcel()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
+    </div>`;
+
+  const rows = (a.plano_semana||[]).map(t=>`
+    <tr>
+      <td style="font-weight:500;white-space:nowrap">${t.dia||''}</td>
+      <td style="color:var(--text2);white-space:nowrap">${t.data||''}</td>
+      <td><span class="tipo-badge ${tipoClass(t.tipo)}">${t.tipo||'–'}</span></td>
+      <td style="min-width:180px;line-height:1.5">${t.descricao||''}</td>
+      <td style="text-align:center;white-space:nowrap">${t.duracao_min?t.duracao_min+' min':'–'}</td>
+      <td style="text-align:center;white-space:nowrap">${t.distancia_km?t.distancia_km+' km':'–'}</td>
+      <td style="text-align:center"><span class="zona-tag">${t.zona_fc||'–'}</span></td>
+      <td style="font-size:12px;color:var(--text2);line-height:1.4">${t.justificativa||''}</td>
+    </tr>`).join('');
+
+  document.getElementById('plano-content').innerHTML = `
+    <div class="card"><div class="card-title"><i class="ti ti-calendar-week"></i>Plano da semana</div>
+    <div class="plan-wrap"><table class="plan">
+      <thead><tr><th>Dia</th><th>Data</th><th>Tipo</th><th>Descrição</th><th>Duração</th><th>Distância</th><th>Zona FC</th><th>Justificativa</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div></div>`;
+
+  document.getElementById('last-update').textContent = 'Análise: '+new Date().toLocaleTimeString('pt-BR');
+  flash('Análise concluída!', 'ok');
+}
+
+let pollAttempts = 0;
+
+async function pollAnalysis(jobId) {
+  pollAttempts++;
+  try {
+    const r = await fetch(API+'/analyze/status/'+jobId);
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const job = await r.json();
+
+    if (job.status === 'processando') {
+      const dots = '.'.repeat((pollAttempts % 3) + 1);
+      document.getElementById('resumo-content').innerHTML = `<div class="empty"><i class="ti ti-loader"></i>Analisando com IA${dots} (${pollAttempts * 3}s)</div>`;
+      if (pollAttempts > 40) {
+        document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>A análise está demorando muito mais que o normal. Tente novamente.</div>`;
+        return;
+      }
+      setTimeout(() => pollAnalysis(jobId), 3000);
+      return;
+    }
+
+    if (job.status === 'erro') {
+      document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro na análise: ${job.error}</div>`;
+      return;
+    }
+
+    renderAnalysisResult(job.result);
+  } catch(e) {
+    document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro ao consultar status: ${e.message}</div>`;
+  }
+}
+
 async function runAnalyze() {
-  document.getElementById('resumo-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Analisando com IA — pode levar alguns segundos...</div>';
+  document.getElementById('resumo-content').innerHTML = '<div class="empty"><i class="ti ti-loader"></i>Iniciando análise...</div>';
   document.getElementById('plano-content').innerHTML  = '<div class="empty"><i class="ti ti-loader"></i>Aguardando análise...</div>';
+  pollAttempts = 0;
   try {
     const r = await fetch(API+'/analyze?days='+getDays(), {method:'POST'});
     if (!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
-    const a = data.analysis;
-    renderReadiness(data.readiness_report);
-    renderCharts(data.readiness_report ? data.readiness_report.series : null);
-    if (!a || a.raw) { document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Resposta inesperada da API.</div>`; return; }
-
-    const statusClass = {verde:'badge-green',amarelo:'badge-yellow',vermelho:'badge-red'}[a.estado_recovery||'verde']||'badge-green';
-    const alertHtml = a.alerta ? `<div class="alert-bar"><i class="ti ti-alert-triangle"></i><span>${a.alerta}</span></div>` : '';
-    const insightsHtml = (a.insights||[]).map(i=>`<div class="insight-item"><div class="insight-dot"></div><span>${i}</span></div>`).join('');
-
-    document.getElementById('resumo-content').innerHTML = `
-      ${alertHtml}
-      <div class="metrics-row">
-        <div class="metric-card"><div class="metric-label">Recovery</div><div class="metric-value"><span class="badge ${statusClass}">${(a.estado_recovery||'–').toUpperCase()}</span></div></div>
-        <div class="metric-card"><div class="metric-label">Carga da semana</div><div class="metric-value" style="font-size:16px;margin-top:6px">${a.carga_semana||'–'}</div></div>
-        <div class="metric-card"><div class="metric-label">Treinos no plano</div><div class="metric-value">${(a.plano_semana||[]).length}</div></div>
-      </div>
-      <div class="card"><div class="card-title"><i class="ti ti-file-text"></i>Resumo</div><p style="font-size:14px;color:var(--text);line-height:1.7">${a.resumo||''}</p></div>
-      <div class="card"><div class="card-title"><i class="ti ti-bulb"></i>Insights</div>${insightsHtml}</div>
-      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
-        <button class="btn" onclick="exportExcel()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
-      </div>`;
-
-    const rows = (a.plano_semana||[]).map(t=>`
-      <tr>
-        <td style="font-weight:500;white-space:nowrap">${t.dia||''}</td>
-        <td style="color:var(--text2);white-space:nowrap">${t.data||''}</td>
-        <td><span class="tipo-badge ${tipoClass(t.tipo)}">${t.tipo||'–'}</span></td>
-        <td style="min-width:180px;line-height:1.5">${t.descricao||''}</td>
-        <td style="text-align:center;white-space:nowrap">${t.duracao_min?t.duracao_min+' min':'–'}</td>
-        <td style="text-align:center;white-space:nowrap">${t.distancia_km?t.distancia_km+' km':'–'}</td>
-        <td style="text-align:center"><span class="zona-tag">${t.zona_fc||'–'}</span></td>
-        <td style="font-size:12px;color:var(--text2);line-height:1.4">${t.justificativa||''}</td>
-      </tr>`).join('');
-
-    document.getElementById('plano-content').innerHTML = `
-      <div class="card"><div class="card-title"><i class="ti ti-calendar-week"></i>Plano da semana</div>
-      <div class="plan-wrap"><table class="plan">
-        <thead><tr><th>Dia</th><th>Data</th><th>Tipo</th><th>Descrição</th><th>Duração</th><th>Distância</th><th>Zona FC</th><th>Justificativa</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div></div>`;
-
-    document.getElementById('last-update').textContent = 'Análise: '+new Date().toLocaleTimeString('pt-BR');
-    flash('Análise concluída!', 'ok');
+    if (!data.job_id) throw new Error('resposta sem job_id');
+    pollAnalysis(data.job_id);
   } catch(e) {
     document.getElementById('resumo-content').innerHTML = `<div class="flash-box flash-err"><i class="ti ti-alert-circle"></i>Erro: ${e.message}</div>`;
   }
